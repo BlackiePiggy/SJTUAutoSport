@@ -111,7 +111,10 @@ def perform_actions(day, venue, start=None, end=None):
             time.sleep(0.5)
             
             # 执行额外的点击操作
-            pyautogui.click(1450, 920)  # 点击立即下单按钮
+            if venue == 1:
+                pyautogui.click(1450, 920)  # 点击立即下单按钮
+            elif venue == 2:
+                pyautogui.click(1450,1018)
             time.sleep(0.5)
             pyautogui.click(787, 760)  # 点击已知同意按钮
             time.sleep(0.5)
