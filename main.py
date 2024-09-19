@@ -1,4 +1,3 @@
-
 import pyautogui
 import time
 import cv2
@@ -20,7 +19,7 @@ def listen_for_interrupt():
             print("检测到Ctrl+Q，程序中断。")
             break
 
-def perform_actions(day, start=None, end=None):
+def perform_actions(day, venue, start=None, end=None):
     # 星期几对应的点击坐标
     day_coordinates = {
         1: (533, 661),  # 周一
@@ -36,8 +35,15 @@ def perform_actions(day, start=None, end=None):
         if interrupt_flag:  # 检查中断标志
             sys.exit(0)  # 退出整个程序
 
-        # 1. 左键单击屏幕的532,597（点击健身房按钮），等待2s
-        pyautogui.click(532, 597) #点击健身房（子衿街）
+        # 1. 左键单击场地对应的健身房按钮
+        if venue == 1:
+            pyautogui.click(532, 597)  # 子衿街
+        elif venue == 2:
+            pyautogui.click(600, 600)  # 学服，假设位置在(600, 600)
+        else:
+            print("无效场地选择")
+            sys.exit(1)
+
         time.sleep(2)
 
         # 2. 左键单击对应星期几的坐标，等待1s
@@ -47,14 +53,23 @@ def perform_actions(day, start=None, end=None):
         # 执行从(1907, 224)到(1907, 387)的拖动操作
         mouse_drag(1907, 224, 1907, 387)
 
-        # 3. 确定截图区域
-        if start is not None and end is not None:
-            left = 500
-            top = 149 + (start - 7) * 50
-            width = 561 - 500
-            height = (end - start + 1) * 50
-        else:
-            left, top, width, height = 439, 140, 570-439, 895-140
+        # 3. 确定截图区域，依据场地不同调整
+        if venue == 1:
+            if start is not None and end is not None:
+                left = 500
+                top = 149 + (start - 7) * 50
+                width = 561 - 500
+                height = (end - start + 1) * 50
+            else:
+                left, top, width, height = 439, 140, 570-439, 895-140
+        elif venue == 2:
+            if start is not None and end is not None:
+                left = 600  # 学服的截图区域起点
+                top = 160 + (start - 7) * 50
+                width = 650 - 600
+                height = (end - start + 1) * 50
+            else:
+                left, top, width, height = 600, 160, 650-600, 900-160
 
         # 4. 截图并保存到文件夹
         screenshot = pyautogui.screenshot(region=(left, top, width, height))
@@ -92,15 +107,15 @@ def perform_actions(day, start=None, end=None):
             screen_y = target_y + top
             
             # 点击目标颜色位置
-            pyautogui.click(screen_x, screen_y) # 点击有空的场次
+            pyautogui.click(screen_x, screen_y)  # 点击有空的场次
             time.sleep(0.5)
             
             # 执行额外的点击操作
-            pyautogui.click(1450, 920) # 点击立即下单按钮
+            pyautogui.click(1450, 920)  # 点击立即下单按钮
             time.sleep(0.5)
-            pyautogui.click(787, 760) # 点击已知同意按钮
+            pyautogui.click(787, 760)  # 点击已知同意按钮
             time.sleep(0.5)
-            pyautogui.click(1060, 816) # 点击立即支付
+            pyautogui.click(1060, 816)  # 点击立即支付
             time.sleep(0.5)
 
             r = requests.get('http://miaotixing.com/trigger?id=tuj1K0C')
@@ -136,6 +151,7 @@ def mouse_drag(start_x, start_y, end_x, end_y, duration=0.5):
 if __name__ == "__main__":
     # 获取用户输入
     day = int(input("请问你要预约几天后的场地？（1表示今天，以此类推）："))
+    venue = int(input("请选择场地（1表示子衿街，2表示学服）："))
     
     # 开始时间输入，用户如果没有输入则设为None
     start_input = input("请问你是否要求场地开始时间？（如果无要求，请直接敲击回车）：")
@@ -159,4 +175,4 @@ if __name__ == "__main__":
     listener_thread.start()
 
     # 执行操作
-    perform_actions(day, start=start_time, end=end_time)
+    perform_actions(day, venue, start=start_time, end=end_time)
