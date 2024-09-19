@@ -151,8 +151,6 @@ if __name__ == "__main__":
         start_time = None
         end_time = None
 
-    print(f"程序将在3秒后开始运行，将执行{day}天后的场地预订操作。请将鼠标移开...")
-    time.sleep(3)
 
     # 启动键盘监听线程
     listener_thread = threading.Thread(target=listen_for_interrupt, daemon=True)
