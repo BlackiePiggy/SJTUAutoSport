@@ -39,7 +39,7 @@ def perform_actions(day, venue, start=None, end=None):
         if venue == 1:
             pyautogui.click(532, 597)  # 子衿街
         elif venue == 2:
-            pyautogui.click(600, 600)  # 学服，假设位置在(600, 600)
+            pyautogui.click(532, 597)  # 学服，假设位置在(600, 600)
         else:
             print("无效场地选择")
             sys.exit(1)
@@ -64,12 +64,12 @@ def perform_actions(day, venue, start=None, end=None):
                 left, top, width, height = 439, 140, 570-439, 895-140
         elif venue == 2:
             if start is not None and end is not None:
-                left = 600  # 学服的截图区域起点
-                top = 160 + (start - 7) * 50
-                width = 650 - 600
+                left = 500
+                top = 250 + (start - 7) * 50
+                width = 561 - 500
                 height = (end - start + 1) * 50
             else:
-                left, top, width, height = 600, 160, 650-600, 900-160
+                left, top, width, height = 439, 250, 570-439, 895-140
 
         # 4. 截图并保存到文件夹
         screenshot = pyautogui.screenshot(region=(left, top, width, height))
@@ -126,7 +126,7 @@ def perform_actions(day, venue, start=None, end=None):
             pyautogui.click(1700,700)
             pyautogui.press('f5')  # 刷新页面
             time.sleep(2)  # 等待页面刷新
-            pyautogui.click(1909,93)
+            pyautogui.click(1909,103)
             time.sleep(0.5)  # 等待页面刷新
 
 def mouse_drag(start_x, start_y, end_x, end_y, duration=0.5):
