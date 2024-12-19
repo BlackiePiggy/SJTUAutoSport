@@ -11,6 +11,27 @@ import os
 # 用于中断程序的标志
 interrupt_flag = False
 
+def decalibration():
+    # 界面显示等待打开至指定界面后点击界面上的“开始标定”按钮
+
+    # 界面显示：“请打开激光切割预约页面，并随机点击一个“立即下单”按钮，弹出立即下单窗口”
+
+    # 界面显示：“按下键盘c键，然后点击勾选框，获取坐标1；再按下键盘c键，然后点击提交订单按钮，获取坐标2”
+
+    # 界面显示：“请打开你想预约的运动界面。按下键盘c键，点击运动类别，获取坐标3。按下键盘c键，点击日期，获取坐标4。”
+
+    # 界面显示：“按下键盘c键，按下鼠标，拖动网页滑动条滑动至所有时段场地按钮均可见时，松开鼠标。获取按下鼠标时的坐标5和松开鼠标时的坐标6”
+
+    # 界面显示：“按下键盘c键，点击第一个场地，获取坐标7，并输入第一个场地的时间数字1。按下键盘c，点击最后一个场地，获取坐标8，并输入最后一个场地的时间数字2。”
+
+    # 界面显示：“按下键盘c键，点击立即下单按钮，获取坐标9。”
+
+    # 界面显示：“保存该套坐标为：________。”允许用户输入文字，并将这套坐标保存为<输入文字>.conf文件，放在代码执行目录下。
+
+    # 界面显示：“标定完成！”
+
+    print("Decalibration...")
+
 def listen_for_interrupt():
     global interrupt_flag
     while True:
@@ -114,7 +135,7 @@ def perform_actions(day, venue, start=None, end=None):
             if venue == 1:
                 pyautogui.click(1450, 920)  # 点击立即下单按钮
             elif venue == 2:
-                pyautogui.click(1450,1018)
+                pyautogui.click(1450,975)
             time.sleep(0.5)
             pyautogui.click(787, 760)  # 点击已知同意按钮
             time.sleep(0.5)
@@ -177,3 +198,5 @@ if __name__ == "__main__":
 
     # 执行操作
     perform_actions(day, venue, start=start_time, end=end_time)
+
+
