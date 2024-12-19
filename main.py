@@ -7,196 +7,225 @@ import sys
 import keyboard
 import threading
 import os
+from threading import Lock
 
 # 用于中断程序的标志
 interrupt_flag = False
+interrupt_lock = Lock()
 
 def decalibration():
-    # 界面显示等待打开至指定界面后点击界面上的“开始标定”按钮
+    print("标定程序开始...")
 
-    # 界面显示：“请打开激光切割预约页面，并随机点击一个“立即下单”按钮，弹出立即下单窗口”
+    # 记录标定坐标的列表
+    coordinates = []
 
-    # 界面显示：“按下键盘c键，然后点击勾选框，获取坐标1；再按下键盘c键，然后点击提交订单按钮，获取坐标2”
+    def get_coordinate(message):
+        print(message)
+        keyboard.wait('c')  # 等待用户按下"c"键
+        x, y = pyautogui.position()  # 获取当前鼠标位置
+        print(f"Coordinate get: ({x}, {y})")
+        return (x, y)
 
-    # 界面显示：“请打开你想预约的运动界面。按下键盘c键，点击运动类别，获取坐标3。按下键盘c键，点击日期，获取坐标4。”
+    # 获取每个步骤的坐标
+    coordinates.append(get_coordinate("请打开<激光切割>预约页面，并随机点击一个<立即下单>按钮，弹出立即下单窗口后将<鼠标悬停在勾选框处>，<按下c键>记录<坐标1>。"))
+    coordinates.append(get_coordinate("鼠标悬停在<提交订单按钮>后按下c键记录坐标2。"))
+    coordinates.append(get_coordinate("现在请打开要预定的运动类别网页，鼠标放置在对应运动类别上按下c键记录坐标3。"))
+    coordinates.append(get_coordinate("鼠标悬停在<第一个日期>上后，按下c键记录坐标4。"))
+    coordinates.append(get_coordinate("鼠标悬停在<最后一个日期>上后，按下c键记录坐标5。"))
+    coordinates.append(get_coordinate("请将鼠标悬停在<拖动网页滑动条起始位置处>，按下c键获取滑动起点坐标6。"))
+    coordinates.append(get_coordinate("拖动滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内。请将鼠标悬停在<拖动网页滑动条结束位置处>，按下c键获取滑动起点坐标7。"))
+    coordinates.append(get_coordinate("点击第一个场地后按下c键记录坐标8。"))
+    starting_time = input("请输入预约开始时间: ")
+    coordinates.append(starting_time)
+    coordinates.append(get_coordinate("点击最后一个场地后按下c键记录坐标9。"))
+    ending_time = input("请输入预约结束时间: ")
+    coordinates.append(ending_time)
+    coordinates.append(get_coordinate("点击<立即下单>按钮后按下c键记录坐标10。"))
 
-    # 界面显示：“按下键盘c键，按下鼠标，拖动网页滑动条滑动至所有时段场地按钮均可见时，松开鼠标。获取按下鼠标时的坐标5和松开鼠标时的坐标6”
-
-    # 界面显示：“按下键盘c键，点击第一个场地，获取坐标7，并输入第一个场地的时间数字1。按下键盘c，点击最后一个场地，获取坐标8，并输入最后一个场地的时间数字2。”
-
-    # 界面显示：“按下键盘c键，点击立即下单按钮，获取坐标9。”
-
-    # 界面显示：“保存该套坐标为：________。”允许用户输入文字，并将这套坐标保存为<输入文字>.conf文件，放在代码执行目录下。
-
-    # 界面显示：“标定完成！”
-
-    print("Decalibration...")
+    # 保存坐标配置
+    file_name = input("请输入保存坐标配置的文件名（无需后缀）：")
+    conf_dir = os.path.join(os.getcwd(), "conf")
+    os.makedirs(conf_dir, exist_ok=True)  # 如果不存在conf文件夹，则创建
+    file_path = os.path.join(conf_dir, f"{file_name}.conf")
+    with open(file_path, 'w') as f:
+        for i, coord in enumerate(coordinates, start=1):
+            f.write(f"Coordinate {i}: {coord}\n")
+    print(f"标定完成！坐标已保存至: {file_path}")
 
 def listen_for_interrupt():
     global interrupt_flag
     while True:
         if keyboard.is_pressed('ctrl+q'):
-            interrupt_flag = True
+            with interrupt_lock:
+                interrupt_flag = True
             print("检测到Ctrl+Q，程序中断。")
             break
 
-def perform_actions(day, venue, start=None, end=None):
-    # 星期几对应的点击坐标
-    day_coordinates = {
-        1: (533, 661),  # 周一
-        2: (660, 660),  # 周二
-        3: (780, 660),  # 周三
-        4: (910, 660),  # 周四
-        5: (1020, 660), # 周五
-        6: (1150, 660), # 周六
-        7: (1280, 660)  # 周日
-    }
+def perform_actions(day, venue, start=None, end=None, coordinates=None):
+    global interrupt_flag
+
+    # 计算日期按钮、每一个预约按钮、截图位置的具体数值
+    # 计算日期按钮date_buttons的坐标
+    date_start_coor = coordinates[3];
+    date_end_coor = coordinates[4];
+    # 共8个日期按钮，分别计算出每个日期按钮的坐标
+    date_buttons = []
+    # 计算出每个日期之间的间隔，共7个间隔，用两个坐标的x坐标之差除以7
+    x_interval = (date_end_coor[0] - date_start_coor[0]) / 7
+    for i in range(7):
+        date_buttons.append((round(date_start_coor[0] + x_interval * i), date_start_coor[1]))
+    # 计算每个预约按钮的坐标
+    book_buttons = []
+    book_start_coor = coordinates[7]
+    book_end_coor = coordinates[8]
+    y_int_num = (time_end - time_start - 1)
+    y_interval = (book_end_coor[1] - book_start_coor[1]) / y_int_num
+    for i in range(y_int_num):
+        book_buttons.append((book_start_coor[0], round(book_start_coor[1] + y_interval * i)))
+
+    # 把date_buttons转换成day_coordinates的形式
+    day_coordinates = {}
+    for i, date_button in enumerate(date_buttons, start=1):
+        day_coordinates[i] = date_button
+
+    def check_interrupt():
+        with interrupt_lock:
+            if interrupt_flag:
+                sys.exit(0)
 
     while True:
-        if interrupt_flag:  # 检查中断标志
-            sys.exit(0)  # 退出整个程序
+        check_interrupt()
 
         # 1. 左键单击场地对应的健身房按钮
-        if venue == 1:
-            pyautogui.click(532, 597)  # 子衿街
-        elif venue == 2:
-            pyautogui.click(532, 597)  # 学服，假设位置在(600, 600)
-        else:
-            print("无效场地选择")
-            sys.exit(1)
-
+        pyautogui.click(coordinates[2])
         time.sleep(2)
 
-        # 2. 左键单击对应星期几的坐标，等待1s
-        pyautogui.click(*day_coordinates[day])
+        # 2. 单击对应星期几的坐标
+        pyautogui.click(*day_coordinates.get(day, (0, 0)))
         time.sleep(1)
 
-        # 执行从(1907, 224)到(1907, 387)的拖动操作
-        mouse_drag(1907, 224, 1907, 387)
+        # 3. 执行从坐标5到坐标6的拖动操作
+        mouse_drag(coordinates[5][0], coordinates[5][1], coordinates[6][0], coordinates[6][1])
 
-        # 3. 确定截图区域，依据场地不同调整
-        if venue == 1:
-            if start is not None and end is not None:
-                left = 500
-                top = 149 + (start - 7) * 50
-                width = 561 - 500
-                height = (end - start + 1) * 50
-            else:
-                left, top, width, height = 439, 140, 570-439, 895-140
-        elif venue == 2:
-            if start is not None and end is not None:
-                left = 500
-                top = 250 + (start - 7) * 50
-                width = 561 - 500
-                height = (end - start + 1) * 50
-            else:
-                left, top, width, height = 439, 250, 570-439, 895-140
+        # 4. 确定截图区域
+        left, top, width, height = calculate_screenshot_region(venue, book_start_coor, book_end_coor)
 
-        # 4. 截图并保存到文件夹
-        screenshot = pyautogui.screenshot(region=(left, top, width, height))
-        screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        # 5. 截图并保存
+        screenshot_path = take_screenshot(left, top, width, height)
 
-        # 创建/清空screenshot文件夹
-        folder = 'screenshot'
-        if not os.path.exists(folder):
-            os.makedirs(folder)
+        # 6. 检查目标颜色
+        if check_target_color(screenshot_path, left, top):
+            handle_success(coordinates)
         else:
-            for filename in os.listdir(folder):
-                file_path = os.path.join(folder, filename)
-                try:
-                    if os.path.isfile(file_path):
-                        os.unlink(file_path)
-                except Exception as e:
-                    print(f"无法删除文件 {file_path}: {e}")
+            handle_retry()
 
-        screenshot_path = os.path.join(folder, 'latest_screenshot.png')
-        cv2.imwrite(screenshot_path, screenshot)
+def calculate_screenshot_region(venue, book_start_coor, book_end_coor):
+    # 每个按钮的尺寸是55x40
+    left = book_start_coor[0] - 25
+    top = book_start_coor[1] - 20
+    width = book_end_coor[0] + 25 - left
+    height = book_end_coor[1] + 20 - top
 
-        # 5. 检查截图区域是否有RGB为（255,191,42）的颜色
-        target_color = np.array([42, 191, 255])  # OpenCV使用BGR顺序
-        mask = cv2.inRange(screenshot, target_color, target_color)
-        
-        if np.any(mask):
-            print("找到目标颜色，发送公众号指令")
+    return left, top, width, height
 
-            # 找到目标颜色的位置
-            color_locations = np.where(mask)
-            target_y, target_x = color_locations[0][0], color_locations[1][0]
-            
-            # 转换回全屏坐标
-            screen_x = target_x + left
-            screen_y = target_y + top
-            
-            # 点击目标颜色位置
-            pyautogui.click(screen_x, screen_y)  # 点击有空的场次
-            time.sleep(0.5)
-            
-            # 执行额外的点击操作
-            if venue == 1:
-                pyautogui.click(1450, 920)  # 点击立即下单按钮
-            elif venue == 2:
-                pyautogui.click(1450,975)
-            time.sleep(0.5)
-            pyautogui.click(787, 760)  # 点击已知同意按钮
-            time.sleep(0.5)
-            pyautogui.click(1060, 816)  # 点击立即支付
-            time.sleep(0.5)
+def take_screenshot(left, top, width, height):
+    folder = 'screenshot'
+    os.makedirs(folder, exist_ok=True)
 
-            r = requests.get('http://miaotixing.com/trigger?id=tuj1K0C')
-            print("程序执行完毕，退出。")
-            sys.exit(0)  # 退出整个程序
-        else:
-            print("未找到目标颜色，刷新页面并重复操作")
-            pyautogui.click(1700,700)
-            pyautogui.press('f5')  # 刷新页面
-            time.sleep(2)  # 等待页面刷新
-            pyautogui.click(1909,103)
-            time.sleep(0.5)  # 等待页面刷新
+    for filename in os.listdir(folder):
+        file_path = os.path.join(folder, filename)
+        if os.path.isfile(file_path):
+            os.unlink(file_path)
+
+    screenshot_path = os.path.join(folder, 'latest_screenshot.png')
+    screenshot = pyautogui.screenshot(region=(left, top, width, height))
+    screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+    cv2.imwrite(screenshot_path, screenshot)
+    return screenshot_path
+
+def check_target_color(screenshot_path, left, top):
+    screenshot = cv2.imread(screenshot_path)
+    target_color = np.array([42, 191, 255])  # BGR 顺序
+    mask = cv2.inRange(screenshot, target_color, target_color)
+
+    if np.any(mask):
+        color_locations = np.where(mask)
+        target_y, target_x = color_locations[0][0], color_locations[1][0]
+        screen_x, screen_y = target_x + left, target_y + top + 20
+        pyautogui.click(screen_x, screen_y)
+        return True
+    return False
+
+def handle_success(coordinates):
+    pyautogui.click(coordinates[9])
+    time.sleep(0.5)
+    pyautogui.click(coordinates[0])
+    time.sleep(0.5)
+    pyautogui.click(coordinates[1])
+    time.sleep(0.5)
+    requests.get('http://miaotixing.com/trigger?id=tuj1K0C')
+    print("程序执行完毕，退出。")
+    sys.exit(0)
+
+def handle_retry():
+    print("未找到目标颜色，刷新页面并重试。")
+    pyautogui.click(coordinates[5])
+    pyautogui.press('f5')
+    time.sleep(2)
 
 def mouse_drag(start_x, start_y, end_x, end_y, duration=0.5):
-    # 移动鼠标到起始位置
     pyautogui.moveTo(start_x, start_y)
-    
-    # 短暂暂停，确保鼠标已经移动到位
     time.sleep(0.1)
-    
-    # 按下鼠标左键
     pyautogui.mouseDown()
-    
-    # 拖动到终点位置
     pyautogui.moveTo(end_x, end_y, duration=duration)
-    
-    # 短暂暂停，确保拖动完成
     time.sleep(0.1)
-    
-    # 释放鼠标左键
     pyautogui.mouseUp()
 
 if __name__ == "__main__":
-    # 获取用户输入
-    day = int(input("请问你要预约几天后的场地？（1表示今天，以此类推）："))
-    venue = int(input("请选择场地（1表示子衿街，2表示学服）："))
-    
-    # 开始时间输入，用户如果没有输入则设为None
-    start_input = input("请问你是否要求场地开始时间？（如果无要求，请直接敲击回车）：")
-    if start_input:
-        start_time = int(start_input)
-        # 如果有开始时间，再询问结束时间
-        end_input = input("请问你是否要求场地结束时间？（如果无要求，请直接敲击回车）：")
-        if end_input:
-            end_time = int(end_input)
+    try:
+        mode = input("请输入模式：1-标定坐标，2-执行预约：")
+        if mode == "1":
+            decalibration()
+        elif mode == "2":
+            # 读取conf文件夹中的场地名称，在页面中以序号+文件名的方式展示出来
+            current_dir = os.getcwd()
+            conf_folder = os.path.join(current_dir, 'conf')
+            file_names = os.listdir(conf_folder)
+            vfile_names = [file for file in file_names if os.path.isfile(os.path.join(conf_folder, file))]
+            for idx, file in enumerate(file_names, start=1):
+                print(f"{idx}. {file}")
+
+            # 获取想要预约的场地和时间
+            venue = int(input("请选择场地序号："))
+            day = int(input("请问你要预约几天后的场地？（1表示今天，以此类推）："))
+ 
+            # 根据venue的值读取对应的conf文件中的坐标
+            if 1 <= venue <= len(file_names):
+                selected_file = file_names[venue - 1]
+                file_path = os.path.join(conf_folder, selected_file)
+                with open(file_path, 'r') as f:
+                    lines = f.readlines()
+                coordinates = []
+                for line in lines[:8] + lines[9:10] + lines[11:12]:
+                    if "Coordinate" in line:
+                        coords = line.split(":")[1].strip().strip('()').split(", ")
+                        coordinates.append(tuple(map(int, coords)))
+                time_start = int(lines[8].split(":")[1].strip())
+                time_end = int(lines[10].split(":")[1].strip())
+            else:
+                print("无效的序号！")
+
+            start_input = input("请问你是否要求场地开始时间？（如果无要求，请直接敲击回车）：")
+            start_time = int(start_input) if start_input else None
+            end_input = input("请问你是否要求场地结束时间？（如果无要求，请直接敲击回车）：")
+            end_time = int(end_input) if end_input else None
+
+            listener_thread = threading.Thread(target=listen_for_interrupt, daemon=True)
+            listener_thread.start()
+
+            perform_actions(day, venue, start=start_time, end=end_time, coordinates=coordinates)
         else:
-            end_time = None
-    else:
-        start_time = None
-        end_time = None
-
-
-    # 启动键盘监听线程
-    listener_thread = threading.Thread(target=listen_for_interrupt, daemon=True)
-    listener_thread.start()
-
-    # 执行操作
-    perform_actions(day, venue, start=start_time, end=end_time)
-
+            print("无效模式，请重新输入1或2。")
+    except Exception as e:
+        print(f"程序执行出错：{e}")
 
