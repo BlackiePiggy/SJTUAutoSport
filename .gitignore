@@ -1,1 +1,4 @@
 screenshot/
+dist/
+build/
+booking.spec
