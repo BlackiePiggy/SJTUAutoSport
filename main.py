@@ -17,13 +17,15 @@ class BookingWorker(QThread):
     progress = pyqtSignal(str)
     error = pyqtSignal(str)
     
-    def __init__(self, coordinates, day, venue, time_start, time_end):
+    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end):
         super().__init__()
         self.coordinates = coordinates
         self.day = day
         self.venue = venue
         self.time_start = time_start
         self.time_end = time_end
+        self.time_set_start = time_set_start
+        self.time_set_end = time_set_end
         self.interrupt_flag = False
         self.interrupt_lock = Lock()
 
@@ -93,17 +95,33 @@ class BookingWorker(QThread):
             file_path = os.path.join(folder, filename)
             if os.path.isfile(file_path):
                 os.unlink(file_path)
-        
-        left = self.coordinates[7][0] - 25
-        top = self.coordinates[7][1] - 20
-        width = self.coordinates[8][0] + 25 - left
-        height = self.coordinates[8][1] + 20 - top
-        
+
+        left, top, width, height = self.calculate_region()
+
         screenshot_path = os.path.join(folder, 'latest_screenshot.png')
         screenshot = pyautogui.screenshot(region=(left, top, width, height))
         screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         cv2.imwrite(screenshot_path, screenshot)
         return screenshot_path
+    
+    def calculate_region(self):
+        # 开始时间是7，结束时间是22
+        # 假设用户设定17-20，那么实际的区域高度
+
+        left_init = self.coordinates[7][0] - 25
+        top_init = self.coordinates[7][1] - 20
+        width_init = self.coordinates[8][0] + 25 - left_init
+        height_init = self.coordinates[8][1] + 20 - top_init
+
+        if self.time_set_start < self.time_start or self.time_set_end > self.time_end:
+            raise ValueError("设定时间超出范围")
+
+        left = left_init
+        top = top_init + (self.time_set_start - self.time_start)/(self.time_end - self.time_start)*height_init
+        width = width_init
+        height = height_init * ((self.time_set_end - self.time_set_start)/(self.time_end - self.time_start))
+        
+        return left, top, width, height
 
     def check_target_color(self, screenshot_path):
         screenshot = cv2.imread(screenshot_path)
@@ -155,9 +173,9 @@ class CalibrationWorker(QThread):
             "鼠标悬停在<第一个日期>上后，按下c键记录坐标4。",
             "鼠标悬停在<最后一个日期>上后，按下c键记录坐标5。",
             "请将鼠标悬停在<拖动网页滑动条起始位置处>，按下c键获取滑动起点坐标6。",
-            "拖动滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内。请将鼠标悬停在<拖动网页滑动条结束位置处>，按下c键获取滑动起点坐标7。",
-            "点击第一个场地后按下c键记录坐标8。",
-            "点击最后一个场地后按下c键记录坐标9。",
+            "拖动网页滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内。请将鼠标悬停在<拖动网页滑动条结束位置处>，按下c键获取滑动起点坐标7。",
+            "点击<第一个场地>后按下c键记录坐标8。",
+            "点击<最后一个场地>后按下c键记录坐标9。",
             "点击<立即下单>按钮后按下c键记录坐标10。"
         ]
 
@@ -224,6 +242,20 @@ class MainWindow(QMainWindow):
         self.day_spin.setRange(1, 7)
         day_layout.addWidget(self.day_spin)
         booking_layout.addLayout(day_layout)
+
+        # 时间选择
+        time_layout = QHBoxLayout()
+        time_layout.addWidget(QLabel("预约时段:"))
+        self.time_start_spin = QSpinBox()
+        self.time_start_spin.setRange(7, 21)
+        self.time_start_spin.setValue(7)
+        time_layout.addWidget(self.time_start_spin)
+        time_layout.addWidget(QLabel("-"))
+        self.time_end_spin = QSpinBox()
+        self.time_end_spin.setRange(8, 22)
+        self.time_end_spin.setValue(22)
+        time_layout.addWidget(self.time_end_spin)
+        booking_layout.addLayout(time_layout)
 
         # 执行按钮
         self.start_button = QPushButton("开始预约")
@@ -311,7 +343,9 @@ class MainWindow(QMainWindow):
             day=self.day_spin.value(),
             venue=self.venue_combo.currentIndex() + 1,
             time_start=time_start,
-            time_end=time_end
+            time_end=time_end,
+            time_set_start=self.time_start_spin.value(),
+            time_set_end=self.time_end_spin.value()
         )
         
         self.booking_worker.progress.connect(self.log_message)
