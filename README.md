@@ -3,8 +3,21 @@ SJTU蹲健身房脚本
 
 # 使用教程视频
 
-
 https://github.com/user-attachments/assets/2e74114c-17b7-4270-8083-94e75da1e665
+
+
+
+# 打包方法
+
+自定义修改booking.spec的内容。
+
+如果没有安装pyinstaller，执行`pip install pyinstaller`
+
+然后执行`pyinstaller booking.spec`
+
+打包好的exe程序会放置在dist文件夹中。
+
+---
 
 
 ## 2024.12.20更新功能
