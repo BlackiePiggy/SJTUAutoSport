@@ -117,9 +117,9 @@ class BookingWorker(QThread):
             raise ValueError("设定时间超出范围")
 
         left = left_init
-        top = top_init + (self.time_set_start - self.time_start)/(self.time_end - self.time_start)*height_init
+        top = round(top_init + (self.time_set_start - self.time_start)/(self.time_end - self.time_start)*height_init)
         width = width_init
-        height = height_init * ((self.time_set_end - self.time_set_start)/(self.time_end - self.time_start))
+        height = round(height_init * ((self.time_set_end - self.time_set_start)/(self.time_end - self.time_start)))
         
         return left, top, width, height
 
@@ -200,7 +200,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("场地预约系统")
         self.setFixedSize(350, 450)
         self.setWindowFlags(
-            self.windowFlags() | 
+            self.windowFlags() |
             Qt.WindowType.WindowStaysOnTopHint
         )
         self.current_coordinates = None
@@ -226,7 +226,7 @@ class MainWindow(QMainWindow):
         self.booking_widget = QWidget()
         booking_layout = QVBoxLayout(self.booking_widget)
         booking_layout.setSpacing(5)
-        
+
         # 场地选择
         venue_layout = QHBoxLayout()
         venue_layout.addWidget(QLabel("场地:"))
@@ -277,7 +277,7 @@ class MainWindow(QMainWindow):
         self.calibration_widget = QWidget()
         self.calibration_widget.hide()
         calibration_layout = QVBoxLayout(self.calibration_widget)
-        
+
         self.calibration_button = QPushButton("开始标定")
         self.calibration_button.clicked.connect(self.start_calibration)
         calibration_layout.addWidget(self.calibration_button)
@@ -328,13 +328,13 @@ class MainWindow(QMainWindow):
 
         with open(conf_path, 'r') as f:
             lines = f.readlines()
-        
+
         coordinates = []
         for line in lines:
             if "Coordinate" in line:
                 coords = line.split(":")[1].strip().strip('()').split(", ")
                 coordinates.append(tuple(map(int, coords)))
-        
+
         time_start = 7
         time_end = 22
 
@@ -347,11 +347,11 @@ class MainWindow(QMainWindow):
             time_set_start=self.time_start_spin.value(),
             time_set_end=self.time_end_spin.value()
         )
-        
+
         self.booking_worker.progress.connect(self.log_message)
         self.booking_worker.error.connect(self.handle_error)
         self.booking_worker.finished.connect(self.handle_booking_finished)
-        
+
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
         self.booking_worker.start()
@@ -360,18 +360,18 @@ class MainWindow(QMainWindow):
         self.calibration_worker = CalibrationWorker()
         self.calibration_worker.progress.connect(self.log_message)
         self.calibration_worker.finished.connect(self.handle_calibration_finished)
-        
+
         self.calibration_button.setEnabled(False)
         self.calibration_worker.start()
-        
+
     def handle_calibration_finished(self, coordinates):
         self.calibration_button.setEnabled(True)
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "保存配置", 
-            os.path.join(os.getcwd(), "conf"), 
+            self, "保存配置",
+            os.path.join(os.getcwd(), "conf"),
             "Configuration Files (*.conf)"
         )
-        
+
         if file_name:
             os.makedirs(os.path.dirname(file_name), exist_ok=True)
             with open(file_name, 'w') as f:
@@ -392,16 +392,16 @@ class MainWindow(QMainWindow):
     def log_message(self, message):
         self.log_text.append(message)
         self.statusBar().showMessage(message)
-        
+
     def closeEvent(self, event):
         if hasattr(self, 'booking_worker') and self.booking_worker.isRunning():
             reply = QMessageBox.question(
-                self, '确认退出', 
+                self, '确认退出',
                 '预约任务正在进行中，确定要退出吗？',
-                QMessageBox.Yes | QMessageBox.No, 
+                QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.No
             )
-            
+
             if reply == QMessageBox.Yes:
                 self.booking_worker.stop()
                 self.booking_worker.wait()
