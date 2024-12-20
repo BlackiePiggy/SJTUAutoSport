@@ -3,7 +3,9 @@ SJTU蹲健身房脚本
 
 # 使用教程视频
 
-https://github.com/user-attachments/assets/2e74114c-17b7-4270-8083-94e75da1e665
+
+
+https://github.com/user-attachments/assets/2cc73439-7308-45d9-a23d-d80f3fb67b56
 
 
 
