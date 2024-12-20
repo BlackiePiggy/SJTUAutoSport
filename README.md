@@ -7,10 +7,10 @@ SJTU蹲健身房脚本
 3. 执行：python main.py -d 1 (-s 17) (-e 21)，-d后跟的是今天开始的第几天，如果是今天就是1，如果是明天就是2；
 
 # 使用教程视频
-<video controls width="600">
-  <source src="video/预约脚本使用教程.mp4" type="video/mp4">
-  您的浏览器不支持视频标签。
-</video>
+
+
+https://github.com/user-attachments/assets/2e74114c-17b7-4270-8083-94e75da1e665
+
 
 ## 2024.12.20更新功能
 1. 添加了标定功能，可以在不同设备上自行添加不同场所的预约程序；
