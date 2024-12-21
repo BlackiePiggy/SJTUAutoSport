@@ -125,11 +125,11 @@ class BookingWorker(QThread):
         return screenshot_path,left,top
     
     def calculate_region(self):
-        icon_width = round(0.768 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
-        icon_height = round(1.12 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
-        left_init = round(self.coordinates[7][0] - 0.5 * icon_width)
+        icon_width = round( 1.12* (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+        icon_height = round(0.768 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+        left_init = round(self.coordinates[7][0] - 0.6 * icon_width)
         top_init = round(self.coordinates[7][1] - 0.5 * icon_height)
-        width_init = icon_width
+        width_init = round(1.2*icon_width)
         height_init = self.coordinates[8][1] - self.coordinates[7][1] + icon_height
 
         if self.time_set_start < self.time_start or self.time_set_end > self.time_end:
@@ -207,16 +207,16 @@ class CalibrationWorker(QThread):
         self.current_step = 0
         self.notify_url = None
         self.steps = [
-            "请打开点击任意一个可点击的<立即下单>按钮，弹出窗口后将鼠标悬停在<勾选框>处，<按下c键>记录<坐标1>",
-            "鼠标悬停在<提交订单>按钮后<按下c键>记录<坐标2>",
-            "现在请打开要预定的运动类别网页，鼠标悬停在对应运动类别上,<按下c键>记录<坐标3>",
-            "鼠标悬停在<第一个日期>上后，<按下c键>记录<坐标4>",
-            "鼠标悬停在<最后一个日期>上后，<按下c键>记录<坐标5>",
-            "将鼠标悬停在<拖动网页滑动条起始位置处>，<按下c键>获取滑动起点<坐标6>",
-            "拖动网页滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内，保持鼠标放置在滑动条上，<按下c键>获取滑动终点<坐标7>",
-            "鼠标悬停在<第一个场地>后，<按下c键>记录<坐标8>",
-            "鼠标悬停在<最后一个场地>后，<按下c键>记录<坐标9>",
-            "鼠标悬停在<立即下单>按钮后，<按下c键>记录<坐标10>",
+            ">请打开点击任意一个可点击的<立即下单>按钮，弹出窗口后将鼠标悬停在<勾选框>处，<按下c键>记录<坐标1>",
+            ">鼠标悬停在<提交订单>按钮后<按下c键>记录<坐标2>",
+            ">现在请打开要预定的运动类别网页，鼠标悬停在对应运动类别上,<按下c键>记录<坐标3>",
+            ">鼠标悬停在<第一个日期>上后，<按下c键>记录<坐标4>",
+            ">鼠标悬停在<最后一个日期>上后，<按下c键>记录<坐标5>",
+            ">将鼠标悬停在<拖动网页滑动条起始位置处>，<按下c键>获取滑动起点<坐标6>",
+            ">拖动网页滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内，保持鼠标放置在滑动条上，<按下c键>获取滑动终点<坐标7>",
+            ">鼠标悬停在<第一个场地>后，<按下c键>记录<坐标8>",
+            ">鼠标悬停在<最后一个场地>后，<按下c键>记录<坐标9>",
+            ">鼠标悬停在<立即下单>按钮后，<按下c键>记录<坐标10>",
         ]
 
     def run(self):
