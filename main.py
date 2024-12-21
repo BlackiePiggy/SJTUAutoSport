@@ -4,7 +4,8 @@ import threading
 import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QComboBox, 
-                            QSpinBox, QTextEdit, QMessageBox, QFileDialog)
+                            QSpinBox, QTextEdit, QMessageBox, QFileDialog,
+                            QLineEdit, QInputDialog, QDialog)  # 添加缺失的导入
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 import pyautogui
 import cv2
@@ -17,7 +18,7 @@ class BookingWorker(QThread):
     progress = pyqtSignal(str)
     error = pyqtSignal(str)
     
-    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end):
+    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end, notify_url=None):
         super().__init__()
         self.coordinates = coordinates
         self.day = day
@@ -26,6 +27,7 @@ class BookingWorker(QThread):
         self.time_end = time_end
         self.time_set_start = time_set_start
         self.time_set_end = time_set_end
+        self.notify_url = notify_url
         self.interrupt_flag = False
         self.interrupt_lock = Lock()
 
@@ -69,10 +71,14 @@ class BookingWorker(QThread):
             self.mouse_drag(self.coordinates[5][0], self.coordinates[5][1], 
                           self.coordinates[6][0], self.coordinates[6][1])
 
+            time.sleep(0.2)
+
             self.progress.emit("截图检查...")
-            screenshot_path = self.take_screenshot()
+            screenshot_path,left_ss,top_ss = self.take_screenshot()
+
+            time.sleep(0.5)
             
-            if self.check_target_color(screenshot_path):
+            if self.check_target_color(screenshot_path,left_ss,top_ss):
                 self.handle_success()
                 break
             else:
@@ -102,16 +108,15 @@ class BookingWorker(QThread):
         screenshot = pyautogui.screenshot(region=(left, top, width, height))
         screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
         cv2.imwrite(screenshot_path, screenshot)
-        return screenshot_path
+        return screenshot_path,left,top
     
     def calculate_region(self):
-        # 开始时间是7，结束时间是22
-        # 假设用户设定17-20，那么实际的区域高度
-
-        left_init = self.coordinates[7][0] - 25
-        top_init = self.coordinates[7][1] - 20
-        width_init = self.coordinates[8][0] + 25 - left_init
-        height_init = self.coordinates[8][1] + 20 - top_init
+        icon_width = round(0.768 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+        icon_height = round(1.12 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+        left_init = round(self.coordinates[7][0] - 0.5 * icon_width)
+        top_init = round(self.coordinates[7][1] - 0.5 * icon_height)
+        width_init = icon_width
+        height_init = self.coordinates[8][1] - self.coordinates[7][1] + icon_height
 
         if self.time_set_start < self.time_start or self.time_set_end > self.time_end:
             raise ValueError("设定时间超出范围")
@@ -123,7 +128,7 @@ class BookingWorker(QThread):
         
         return left, top, width, height
 
-    def check_target_color(self, screenshot_path):
+    def check_target_color(self, screenshot_path, left_ss, top_ss):
         screenshot = cv2.imread(screenshot_path)
         target_color = np.array([42, 191, 255])
         mask = cv2.inRange(screenshot, target_color, target_color)
@@ -131,9 +136,9 @@ class BookingWorker(QThread):
         if np.any(mask):
             color_locations = np.where(mask)
             target_y, target_x = color_locations[0][0], color_locations[1][0]
-            left = self.coordinates[7][0] - 25
-            top = self.coordinates[7][1] - 20
-            screen_x, screen_y = target_x + left, target_y + top + 20
+            left = left_ss
+            top = top_ss
+            screen_x, screen_y = target_x + left, round(target_y + top + 0.5 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
             pyautogui.click(screen_x, screen_y)
             return True
         return False
@@ -141,18 +146,24 @@ class BookingWorker(QThread):
     def handle_success(self):
         self.progress.emit("预约成功，提交订单...")
         pyautogui.click(self.coordinates[9])
-        time.sleep(0.5)
+        time.sleep(1)
         pyautogui.click(self.coordinates[0])
-        time.sleep(0.5)
+        time.sleep(1)
         pyautogui.click(self.coordinates[1])
-        time.sleep(0.5)
-        requests.get('http://miaotixing.com/trigger?id=tuj1K0C')
+        time.sleep(1)
+        if self.notify_url:
+            try:
+                requests.get(self.notify_url)
+            except:
+                self.progress.emit("通知发送失败")
         self.progress.emit("订单提交完成！")
 
     def handle_retry(self):
-        pyautogui.click(self.coordinates[5])
+        self.mouse_drag(self.coordinates[6][0], self.coordinates[6][1],
+                        self.coordinates[5][0], self.coordinates[5][1])
+        time.sleep(0.2)
         pyautogui.press('f5')
-        time.sleep(2)
+        time.sleep(5)
 
     def stop(self):
         with self.interrupt_lock:
@@ -160,23 +171,25 @@ class BookingWorker(QThread):
 
 class CalibrationWorker(QThread):
     progress = pyqtSignal(str)
-    finished = pyqtSignal(list)
+    finished = pyqtSignal(tuple)
+    url_requested = pyqtSignal()  # 新信号用于请求URL输入
     
-    def __init__(self):
-        super().__init__()
+    def __init__(self, parent=None):
+        super().__init__(parent)
         self.coordinates = []
         self.current_step = 0
+        self.notify_url = None
         self.steps = [
-            "请打开<激光切割>预约页面，并随机点击一个<立即下单>按钮，弹出立即下单窗口后将<鼠标悬停在勾选框处>，<按下c键>记录<坐标1>。",
-            "鼠标悬停在<提交订单按钮>后按下c键记录坐标2。",
-            "现在请打开要预定的运动类别网页，鼠标放置在对应运动类别上按下c键记录坐标3。",
-            "鼠标悬停在<第一个日期>上后，按下c键记录坐标4。",
-            "鼠标悬停在<最后一个日期>上后，按下c键记录坐标5。",
-            "请将鼠标悬停在<拖动网页滑动条起始位置处>，按下c键获取滑动起点坐标6。",
-            "拖动网页滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内。请将鼠标悬停在<拖动网页滑动条结束位置处>，按下c键获取滑动起点坐标7。",
-            "点击<第一个场地>后按下c键记录坐标8。",
-            "点击<最后一个场地>后按下c键记录坐标9。",
-            "点击<立即下单>按钮后按下c键记录坐标10。"
+            "请打开点击任意一个可点击的<立即下单>按钮，弹出窗口后将鼠标悬停在<勾选框>处，<按下c键>记录<坐标1>",
+            "鼠标悬停在<提交订单>按钮后<按下c键>记录<坐标2>",
+            "现在请打开要预定的运动类别网页，鼠标悬停在对应运动类别上,<按下c键>记录<坐标3>",
+            "鼠标悬停在<第一个日期>上后，<按下c键>记录<坐标4>",
+            "鼠标悬停在<最后一个日期>上后，<按下c键>记录<坐标5>",
+            "将鼠标悬停在<拖动网页滑动条起始位置处>，<按下c键>获取滑动起点<坐标6>",
+            "拖动网页滑动条，直到<所有可预约按钮>和<立即下单按钮>全部出现在视野内，保持鼠标放置在滑动条上，<按下c键>获取滑动终点<坐标7>",
+            "鼠标悬停在<第一个场地>后，<按下c键>记录<坐标8>",
+            "鼠标悬停在<最后一个场地>后，<按下c键>记录<坐标9>",
+            "鼠标悬停在<立即下单>按钮后，<按下c键>记录<坐标10>",
         ]
 
     def run(self):
@@ -192,11 +205,13 @@ class CalibrationWorker(QThread):
             self.coordinates.append((x, y))
             self.current_step += 1
             
-        self.finished.emit(self.coordinates)
+        self.finished.emit((self.coordinates, self.notify_url))
+    
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
+        self.calibration_worker = None
         self.setWindowTitle("场地预约系统")
         self.setFixedSize(350, 450)
         self.setWindowFlags(
@@ -295,6 +310,13 @@ class MainWindow(QMainWindow):
         self.statusBar().setStyleSheet("QStatusBar { font-size: 11px; }")
         self.statusBar().showMessage("就绪")
 
+        # Add URL input for booking
+        notify_layout = QHBoxLayout()
+        notify_layout.addWidget(QLabel("通知URL:"))
+        self.notify_url_edit = QLineEdit()
+        notify_layout.addWidget(self.notify_url_edit)
+        booking_layout.addLayout(notify_layout)
+
     def stop_booking(self):
         if hasattr(self, 'booking_worker'):
             self.booking_worker.stop()
@@ -306,6 +328,20 @@ class MainWindow(QMainWindow):
         if os.path.exists(conf_folder):
             files = [f for f in os.listdir(conf_folder) if f.endswith('.conf')]
             self.venue_combo.addItems([f.replace('.conf', '') for f in files])
+            
+        # 添加选择变更事件处理
+        self.venue_combo.currentTextChanged.connect(self.on_venue_changed)
+
+    def on_venue_changed(self, venue_name):
+        if venue_name:
+            conf_path = os.path.join(os.getcwd(), 'conf', f"{venue_name}.conf")
+            if os.path.exists(conf_path):
+                with open(conf_path, 'r') as f:
+                    for line in f:
+                        if "NotifyURL" in line:
+                            url = line.split("NotifyURL:")[1].strip()
+                            self.notify_url_edit.setText(url)
+                            break
 
     def handle_mode_change(self, mode):
         if mode == "执行预约":
@@ -330,22 +366,26 @@ class MainWindow(QMainWindow):
             lines = f.readlines()
 
         coordinates = []
+        notify_url = None
         for line in lines:
             if "Coordinate" in line:
                 coords = line.split(":")[1].strip().strip('()').split(", ")
                 coordinates.append(tuple(map(int, coords)))
+            elif "NotifyURL" in line:
+                notify_url = line.split("NotifyURL:")[1].strip()
 
-        time_start = 7
-        time_end = 22
+        if not notify_url:
+            notify_url = self.notify_url_edit.text()
 
         self.booking_worker = BookingWorker(
             coordinates=coordinates,
             day=self.day_spin.value(),
             venue=self.venue_combo.currentIndex() + 1,
-            time_start=time_start,
-            time_end=time_end,
+            time_start=7,
+            time_end=22,
             time_set_start=self.time_start_spin.value(),
-            time_set_end=self.time_end_spin.value()
+            time_set_end=self.time_end_spin.value(),
+            notify_url=notify_url
         )
 
         self.booking_worker.progress.connect(self.log_message)
@@ -357,14 +397,26 @@ class MainWindow(QMainWindow):
         self.booking_worker.start()
 
     def start_calibration(self):
-        self.calibration_worker = CalibrationWorker()
+        self.calibration_worker = CalibrationWorker(self)
         self.calibration_worker.progress.connect(self.log_message)
         self.calibration_worker.finished.connect(self.handle_calibration_finished)
+
+        # 输入URL的处理
+        input_dialog = QInputDialog(self)
+        input_dialog.setWindowTitle("输入通知URL")
+        input_dialog.setLabelText("请输入通知URL（可选，留空跳过）：")
+        input_dialog.setWindowFlags(input_dialog.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        
+        if input_dialog.exec() == QDialog.DialogCode.Accepted:
+            self.calibration_worker.notify_url = input_dialog.textValue()
+        else:
+            self.calibration_worker.notify_url = ""
 
         self.calibration_button.setEnabled(False)
         self.calibration_worker.start()
 
-    def handle_calibration_finished(self, coordinates):
+    def handle_calibration_finished(self, result):
+        coordinates, notify_url = result  # 正确解包tuple
         self.calibration_button.setEnabled(True)
         file_name, _ = QFileDialog.getSaveFileName(
             self, "保存配置",
@@ -377,6 +429,8 @@ class MainWindow(QMainWindow):
             with open(file_name, 'w') as f:
                 for i, coord in enumerate(coordinates, start=1):
                     f.write(f"Coordinate {i}: {coord}\n")
+                if notify_url:
+                    f.write(f"NotifyURL: {notify_url}\n")
             self.log_message(f"标定完成！配置已保存至: {file_name}")
             self.update_venue_list()
 
