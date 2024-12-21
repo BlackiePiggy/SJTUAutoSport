@@ -5,7 +5,7 @@ import time
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QPushButton, QLabel, QComboBox, 
                             QSpinBox, QTextEdit, QMessageBox, QFileDialog,
-                            QLineEdit, QInputDialog, QDialog)  # 添加缺失的导入
+                            QLineEdit, QInputDialog, QDialog, QCheckBox)  # Added QCheckBox
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 import pyautogui
 import cv2
@@ -17,8 +17,9 @@ class BookingWorker(QThread):
     finished = pyqtSignal()
     progress = pyqtSignal(str)
     error = pyqtSignal(str)
+    debug_step_ready = pyqtSignal(str)  # New signal for debug mode
     
-    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end, notify_url=None):
+    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end, notify_url=None, debug_mode=False):
         super().__init__()
         self.coordinates = coordinates
         self.day = day
@@ -30,6 +31,14 @@ class BookingWorker(QThread):
         self.notify_url = notify_url
         self.interrupt_flag = False
         self.interrupt_lock = Lock()
+        self.debug_mode = debug_mode
+        self.debug_step_event = threading.Event()
+
+    def wait_for_debug_step(self, step_description):
+        if self.debug_mode:
+            self.debug_step_ready.emit(step_description)
+            self.debug_step_event.wait()
+            self.debug_step_event.clear()
 
     def run(self):
         try:
@@ -59,21 +68,25 @@ class BookingWorker(QThread):
 
         while not self.interrupt_flag:
             self.progress.emit(f">点击场地类别按钮，坐标: {self.coordinates[2]}")
+            self.wait_for_debug_step("点击场地类别按钮")
             pyautogui.click(self.coordinates[2])
             time.sleep(2)
 
             selected_day_coord = day_coordinates.get(self.day, (0, 0))
             self.progress.emit(f">选择第{self.day}天，点击坐标: {selected_day_coord}")
+            self.wait_for_debug_step(f"选择第{self.day}天")
             pyautogui.click(*selected_day_coord)
             time.sleep(1)
 
             self.progress.emit(f">拖动滚动条，从坐标 {self.coordinates[5]} 到 {self.coordinates[6]}")
+            self.wait_for_debug_step("拖动滚动条")
             self.mouse_drag(self.coordinates[5][0], self.coordinates[5][1],
                             self.coordinates[6][0], self.coordinates[6][1])
 
             time.sleep(0.2)
 
             self.progress.emit(">开始截图检查可用时段...")
+            self.wait_for_debug_step("截图检查")
             screenshot_path, left_ss, top_ss = self.take_screenshot()
 
             if self.check_target_color(screenshot_path, left_ss, top_ss):
@@ -81,6 +94,7 @@ class BookingWorker(QThread):
                 break
             else:
                 self.progress.emit(">未找到可用时段，准备刷新重试")
+                self.wait_for_debug_step("刷新重试")
                 self.handle_retry()
 
     def mouse_drag(self, start_x, start_y, end_x, end_y, duration=0.5):
@@ -147,14 +161,17 @@ class BookingWorker(QThread):
 
     def handle_success(self):
         self.progress.emit(f">点击立即下单按钮，坐标: {self.coordinates[9]}")
+        self.wait_for_debug_step("点击立即下单")
         pyautogui.click(self.coordinates[9])
         time.sleep(1)
 
         self.progress.emit(f">点击勾选框，坐标: {self.coordinates[0]}")
+        self.wait_for_debug_step("点击勾选框")
         pyautogui.click(self.coordinates[0])
         time.sleep(1)
 
         self.progress.emit(f">点击提交订单按钮，坐标: {self.coordinates[1]}")
+        self.wait_for_debug_step("点击提交订单")
         pyautogui.click(self.coordinates[1])
         time.sleep(1)
 
@@ -325,6 +342,16 @@ class MainWindow(QMainWindow):
         notify_layout.addWidget(self.notify_url_edit)
         booking_layout.addLayout(notify_layout)
 
+        # Add debug mode checkbox
+        debug_layout = QHBoxLayout()
+        self.debug_checkbox = QCheckBox("Debug模式")
+        debug_layout.addWidget(self.debug_checkbox)
+        self.next_step_button = QPushButton("下一步")
+        self.next_step_button.clicked.connect(self.execute_next_step)
+        self.next_step_button.setEnabled(False)
+        debug_layout.addWidget(self.next_step_button)
+        booking_layout.addLayout(debug_layout)
+
     def stop_booking(self):
         if hasattr(self, 'booking_worker'):
             self.booking_worker.stop()
@@ -393,12 +420,14 @@ class MainWindow(QMainWindow):
             time_end=22,
             time_set_start=self.time_start_spin.value(),
             time_set_end=self.time_end_spin.value(),
-            notify_url=notify_url
+            notify_url=notify_url,
+            debug_mode=self.debug_checkbox.isChecked()  # Add debug mode parameter
         )
 
         self.booking_worker.progress.connect(self.log_message)
         self.booking_worker.error.connect(self.handle_error)
         self.booking_worker.finished.connect(self.handle_booking_finished)
+        self.booking_worker.debug_step_ready.connect(self.handle_debug_step)
 
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -442,9 +471,18 @@ class MainWindow(QMainWindow):
             self.log_message(f"标定完成！配置已保存至: {file_name}")
             self.update_venue_list()
 
+    def handle_debug_step(self, step_description):
+        self.next_step_button.setEnabled(True)
+        self.log_message(f"Debug模式: 等待执行 - {step_description}")
+
+    def execute_next_step(self):
+        self.next_step_button.setEnabled(False)
+        self.booking_worker.debug_step_event.set()
+
     def handle_booking_finished(self):
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.next_step_button.setEnabled(False)
         self.log_message("预约任务完成")
 
     def handle_error(self, error_msg):
