@@ -6,12 +6,14 @@ from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QHBoxLayout, QPushButton, QLabel, QComboBox, 
                             QSpinBox, QTextEdit, QMessageBox, QFileDialog,
                             QLineEdit, QInputDialog, QDialog, QCheckBox)  # Added QCheckBox
+from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QThread, pyqtSignal, Qt
 import pyautogui
 import cv2
 import numpy as np
 import requests
 from threading import Lock
+import ctypes
 
 class BookingWorker(QThread):
     finished = pyqtSignal()
@@ -245,6 +247,7 @@ class MainWindow(QMainWindow):
         )
         self.current_coordinates = None
         self.setupUI()
+        self.setWindowIcon(QIcon('booking.ico'))  # 替换'icon.ico'为你的图标文件路径
 
     def setupUI(self):
         central_widget = QWidget()
@@ -513,6 +516,8 @@ class MainWindow(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    myappid = 'SJTUsport预约'  # 任意字符串
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
