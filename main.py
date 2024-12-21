@@ -40,14 +40,13 @@ class BookingWorker(QThread):
             self.finished.emit()
 
     def perform_actions(self):
-        # 复用原来的核心逻辑，但添加进度信息发送
         date_start_coor = self.coordinates[3]
         date_end_coor = self.coordinates[4]
         date_buttons = []
         x_interval = (date_end_coor[0] - date_start_coor[0]) / 7
         for i in range(7):
             date_buttons.append((round(date_start_coor[0] + x_interval * i), date_start_coor[1]))
-        
+
         book_buttons = []
         book_start_coor = self.coordinates[7]
         book_end_coor = self.coordinates[8]
@@ -59,30 +58,29 @@ class BookingWorker(QThread):
         day_coordinates = {i: button for i, button in enumerate(date_buttons, start=1)}
 
         while not self.interrupt_flag:
-            self.progress.emit("点击场地...")
+            self.progress.emit(f">点击场地类别按钮，坐标: {self.coordinates[2]}")
             pyautogui.click(self.coordinates[2])
             time.sleep(2)
 
-            self.progress.emit("选择日期...")
-            pyautogui.click(*day_coordinates.get(self.day, (0, 0)))
+            selected_day_coord = day_coordinates.get(self.day, (0, 0))
+            self.progress.emit(f">选择第{self.day}天，点击坐标: {selected_day_coord}")
+            pyautogui.click(*selected_day_coord)
             time.sleep(1)
 
-            self.progress.emit("拖动滚动条...")
-            self.mouse_drag(self.coordinates[5][0], self.coordinates[5][1], 
-                          self.coordinates[6][0], self.coordinates[6][1])
+            self.progress.emit(f">拖动滚动条，从坐标 {self.coordinates[5]} 到 {self.coordinates[6]}")
+            self.mouse_drag(self.coordinates[5][0], self.coordinates[5][1],
+                            self.coordinates[6][0], self.coordinates[6][1])
 
             time.sleep(0.2)
 
-            self.progress.emit("截图检查...")
-            screenshot_path,left_ss,top_ss = self.take_screenshot()
+            self.progress.emit(">开始截图检查可用时段...")
+            screenshot_path, left_ss, top_ss = self.take_screenshot()
 
-            time.sleep(0.5)
-            
-            if self.check_target_color(screenshot_path,left_ss,top_ss):
+            if self.check_target_color(screenshot_path, left_ss, top_ss):
                 self.handle_success()
                 break
             else:
-                self.progress.emit("未找到可用时段，刷新重试...")
+                self.progress.emit(">未找到可用时段，准备刷新重试")
                 self.handle_retry()
 
     def mouse_drag(self, start_x, start_y, end_x, end_y, duration=0.5):
@@ -136,27 +134,37 @@ class BookingWorker(QThread):
         if np.any(mask):
             color_locations = np.where(mask)
             target_y, target_x = color_locations[0][0], color_locations[1][0]
-            left = left_ss
-            top = top_ss
-            screen_x, screen_y = target_x + left, round(target_y + top + 0.5 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+            screen_x = target_x + left_ss
+            screen_y = round(target_y + top_ss + 0.5 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+
+            self.progress.emit(f">找到目标颜色(42,191,255)，最左上角坐标: ({screen_x}, {screen_y})")
+            self.progress.emit(f">点击预约按钮，坐标: ({screen_x}, {screen_y})")
             pyautogui.click(screen_x, screen_y)
             return True
+
+        self.progress.emit(">未在截图中找到目标颜色(42,191,255)")
         return False
 
     def handle_success(self):
-        self.progress.emit("预约成功，提交订单...")
+        self.progress.emit(f">点击立即下单按钮，坐标: {self.coordinates[9]}")
         pyautogui.click(self.coordinates[9])
         time.sleep(1)
+
+        self.progress.emit(f">点击勾选框，坐标: {self.coordinates[0]}")
         pyautogui.click(self.coordinates[0])
         time.sleep(1)
+
+        self.progress.emit(f">点击提交订单按钮，坐标: {self.coordinates[1]}")
         pyautogui.click(self.coordinates[1])
         time.sleep(1)
+
         if self.notify_url:
             try:
                 requests.get(self.notify_url)
+                self.progress.emit(f">发送通知到URL: {self.notify_url}")
             except:
-                self.progress.emit("通知发送失败")
-        self.progress.emit("订单提交完成！")
+                self.progress.emit(">通知发送失败")
+        self.progress.emit(">订单提交完成！")
 
     def handle_retry(self):
         self.mouse_drag(self.coordinates[6][0], self.coordinates[6][1],
