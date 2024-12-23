@@ -19,9 +19,9 @@ class BookingWorker(QThread):
     finished = pyqtSignal()
     progress = pyqtSignal(str)
     error = pyqtSignal(str)
-    debug_step_ready = pyqtSignal(str)  # New signal for debug mode
+    debug_step_ready = pyqtSignal(str)
     
-    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end, notify_url=None, debug_mode=False):
+    def __init__(self, coordinates, day, venue, time_start, time_end, time_set_start, time_set_end, notify_url=None, debug_mode=False, target_color=None):
         super().__init__()
         self.coordinates = coordinates
         self.day = day
@@ -31,6 +31,7 @@ class BookingWorker(QThread):
         self.time_set_start = time_set_start
         self.time_set_end = time_set_end
         self.notify_url = notify_url
+        self.target_color = target_color
         self.interrupt_flag = False
         self.interrupt_lock = Lock()
         self.debug_mode = debug_mode
@@ -144,21 +145,24 @@ class BookingWorker(QThread):
 
     def check_target_color(self, screenshot_path, left_ss, top_ss):
         screenshot = cv2.imread(screenshot_path)
-        target_color = np.array([42, 191, 255])
-        mask = cv2.inRange(screenshot, target_color, target_color)
+        if self.target_color is None:
+            self.progress.emit(">错误：未设置目标颜色")
+            return False
+            
+        mask = cv2.inRange(screenshot, self.target_color, self.target_color)
 
         if np.any(mask):
             color_locations = np.where(mask)
             target_y, target_x = color_locations[0][0], color_locations[1][0]
             screen_x = target_x + left_ss
-            screen_y = round(target_y + top_ss + 0.5 * (self.coordinates[8][1] - self.coordinates[7][1]) / 14)
+            screen_y = target_y + top_ss
 
-            self.progress.emit(f">找到目标颜色(42,191,255)，最左上角坐标: ({screen_x}, {screen_y})")
+            self.progress.emit(f">找到目标颜色{self.target_color}，最左上角坐标: ({screen_x}, {screen_y})")
             self.progress.emit(f">点击预约按钮，坐标: ({screen_x}, {screen_y})")
             pyautogui.click(screen_x, screen_y)
             return True
 
-        self.progress.emit(">未在截图中找到目标颜色(42,191,255)")
+        self.progress.emit(f">未在截图中找到目标颜色{self.target_color}")
         return False
 
     def handle_success(self):
@@ -206,7 +210,9 @@ class CalibrationWorker(QThread):
         self.coordinates = []
         self.current_step = 0
         self.notify_url = None
+        self.target_color = None
         self.steps = [
+            ">将鼠标悬停在任一可预约的场地上，然后按下<按键c>，获取识别颜色bgr值",
             ">请打开点击任意一个可点击的<立即下单>按钮，弹出窗口后将鼠标悬停在<勾选框>处，<按下c键>记录<坐标1>",
             ">鼠标悬停在<提交订单>按钮后<按下c键>记录<坐标2>",
             ">现在请打开要预定的运动类别网页，鼠标悬停在对应运动类别上,<按下c键>记录<坐标3>",
@@ -222,7 +228,18 @@ class CalibrationWorker(QThread):
     def run(self):
         import keyboard
         
-        for step in self.steps:
+        # Get color first
+        self.progress.emit(self.steps[0])
+        keyboard.wait('c')
+        x, y = pyautogui.position()
+        screenshot = pyautogui.screenshot()
+        screenshot = cv2.cvtColor(np.array(screenshot), cv2.COLOR_RGB2BGR)
+        self.target_color = screenshot[y, x]
+        self.progress.emit(f">获取到BGR颜色值: {self.target_color}")
+        self.current_step += 1
+        
+        # Then get coordinates
+        for step in self.steps[1:]:
             if self.current_step >= len(self.steps):
                 break
                 
@@ -232,7 +249,7 @@ class CalibrationWorker(QThread):
             self.coordinates.append((x, y))
             self.current_step += 1
             
-        self.finished.emit((self.coordinates, self.notify_url))
+        self.finished.emit((self.coordinates, self.notify_url, self.target_color))
     
 
 class MainWindow(QMainWindow):
@@ -405,15 +422,24 @@ class MainWindow(QMainWindow):
 
         coordinates = []
         notify_url = None
+        target_color = None
+        
         for line in lines:
             if "Coordinate" in line:
                 coords = line.split(":")[1].strip().strip('()').split(", ")
                 coordinates.append(tuple(map(int, coords)))
             elif "NotifyURL" in line:
                 notify_url = line.split("NotifyURL:")[1].strip()
+            elif "TargetColor" in line:
+                color = line.split(":")[1].strip().strip('[]').split(", ")
+                target_color = np.array([int(x) for x in color])
 
         if not notify_url:
             notify_url = self.notify_url_edit.text()
+
+        if target_color is None:
+            QMessageBox.warning(self, "错误", "配置文件中未找到目标颜色！请重新标定。")
+            return
 
         self.booking_worker = BookingWorker(
             coordinates=coordinates,
@@ -424,7 +450,8 @@ class MainWindow(QMainWindow):
             time_set_start=self.time_start_spin.value(),
             time_set_end=self.time_end_spin.value(),
             notify_url=notify_url,
-            debug_mode=self.debug_checkbox.isChecked()  # Add debug mode parameter
+            debug_mode=self.debug_checkbox.isChecked(),
+            target_color=target_color
         )
 
         self.booking_worker.progress.connect(self.log_message)
@@ -456,7 +483,7 @@ class MainWindow(QMainWindow):
         self.calibration_worker.start()
 
     def handle_calibration_finished(self, result):
-        coordinates, notify_url = result  # 正确解包tuple
+        coordinates, notify_url, target_color = result  # Unpack the tuple correctly
         self.calibration_button.setEnabled(True)
         file_name, _ = QFileDialog.getSaveFileName(
             self, "保存配置",
@@ -467,6 +494,8 @@ class MainWindow(QMainWindow):
         if file_name:
             os.makedirs(os.path.dirname(file_name), exist_ok=True)
             with open(file_name, 'w') as f:
+                if target_color is not None:
+                    f.write(f"TargetColor: [{target_color[0]}, {target_color[1]}, {target_color[2]}]\n")
                 for i, coord in enumerate(coordinates, start=1):
                     f.write(f"Coordinate {i}: {coord}\n")
                 if notify_url:

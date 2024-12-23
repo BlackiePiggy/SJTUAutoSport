@@ -25,6 +25,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
+    exclude_binaries=True,  # 添加此行
     name='场地捡漏',
     debug=False,
     bootloader_ignore_signals=False,
